@@ -1,8 +1,14 @@
 import axios from "axios";
 import { clearSession, getStoredSession } from "../auth/storage";
 
+const apiBaseUrl =
+  process.env.NEXT_PUBLIC_API_URL ??
+  (process.env.NODE_ENV === "production"
+    ? "https://proto-api.taminaka.com/api"
+    : "http://localhost:8080/api");
+
 export const apiClient = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080/api",
+  baseURL: apiBaseUrl,
   headers: {
     "Content-Type": "application/json",
   },
