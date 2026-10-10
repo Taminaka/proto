@@ -9,6 +9,7 @@ COPY --from=dependencies /app/node_modules ./node_modules
 COPY . .
 ARG NEXT_PUBLIC_API_URL=https://proto-api.taminaka.com/api
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+RUN mkdir -p public
 RUN npm run build
 
 FROM node:20-alpine AS runner
