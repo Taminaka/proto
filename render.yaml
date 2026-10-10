@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: tamaka-frontend
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /
+    plan: free
+    domains:
+      - proto.taminaka.com
+    envVars:
+      - key: NEXT_PUBLIC_API_URL
+        value: https://proto-api.taminaka.com/api
