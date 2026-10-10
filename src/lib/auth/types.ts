@@ -8,6 +8,19 @@ export type AuthSession = {
   activeMode: string;
 };
 
+export type UserProfile = {
+  id: number;
+  email: string;
+  fullName: string;
+  phone?: string | null;
+  address?: string | null;
+  avatarUrl?: string | null;
+  roles: Role[];
+  activeMode: string;
+  status: string;
+  isVerified: boolean;
+};
+
 export type LoginRequest = {
   email: string;
   password: string;

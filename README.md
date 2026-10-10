@@ -26,4 +26,8 @@ Create a Render Blueprint from this repository using `render.yaml`, or create a 
 - Custom domain: `proto.taminaka.com`
 - `NEXT_PUBLIC_API_URL`: `https://proto-api.taminaka.com/api`
 
+Authenticated users can edit their name, phone, address, and profile photo from
+the account menu. Profile uploads use the backend's Cloudflare R2 storage
+configuration.
+
 The API is maintained in the separate `tamaka-backend` repository.

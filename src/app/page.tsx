@@ -3,6 +3,8 @@
 import { FormEvent, useEffect, useState } from "react";
 import { getApiErrorMessage } from "@/lib/api/client";
 import { useAuth } from "@/lib/auth/context";
+import { getMyProfile, updateMyProfile, uploadAvatar } from "@/lib/auth/account-api";
+import type { UserProfile } from "@/lib/auth/types";
 import { getPublicCategories, type Category } from "@/lib/catalog/api";
 import { listOffers, type Offer, type OfferType, getOffer, getRecommendations } from "@/lib/catalog/offer-api";
 
@@ -24,6 +26,9 @@ export default function Home() {
   const [recommendations, setRecommendations] = useState<{ item: Offer; reason: string }[]>([]);
   const [error, setError] = useState("");
   const [authOpen, setAuthOpen] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
 
   async function loadOffers(type = active) {
     try {
@@ -61,6 +66,7 @@ export default function Home() {
       setAuthOpen(true);
       return;
     }
+
     try {
       const response = await getRecommendations();
       setRecommendations(response.items.slice(0, 3));
@@ -70,26 +76,43 @@ export default function Home() {
     }
   }
 
+  async function openAccount() {
+    if (!session) {
+      setAuthOpen(true);
+      return;
+    }
+    try {
+      setProfile(await getMyProfile());
+      setAccountOpen(true);
+      setMobileMenuOpen(false);
+    } catch (requestError) {
+      setError(getApiErrorMessage(requestError));
+    }
+  }
+
   return (
     <div className="site-shell">
       <header className="topbar">
         <a className="brand" href="#">TAMAKA<span>.</span></a>
-        <nav className="main-nav">
-          <a href="#explore">Explorar</a>
-          <a href="#recommendations">Recomendaciones</a>
-          {session?.roles.includes("OPERADOR") && <a href="#operator">Mi operación</a>}
-          {session?.roles.includes("ADMIN") && <a href="#admin">Administración</a>}
+        <nav className={mobileMenuOpen ? "main-nav open" : "main-nav"}>
+          <a href="#explore" onClick={() => setMobileMenuOpen(false)}>Explorar</a>
+          <a href="#recommendations" onClick={() => setMobileMenuOpen(false)}>Recomendaciones</a>
+          {session?.roles.includes("OPERADOR") && <a href="#operator" onClick={() => setMobileMenuOpen(false)}>Mi operación</a>}
+          {session?.roles.includes("ADMIN") && <a href="#admin" onClick={() => setMobileMenuOpen(false)}>Administración</a>}
+          {session && <button className="mobile-account-link" onClick={() => void openAccount()}>Editar cuenta</button>}
         </nav>
         <div className="account-actions">
           {session ? (
             <>
-              <span className="user-label">{session.fullName}</span>
+              <button className="user-label account-link" onClick={() => void openAccount()}>{session.fullName}</button>
               <button className="link-button" onClick={() => void logout()}>Salir</button>
             </>
           ) : (
             <button className="link-button" onClick={() => setAuthOpen(true)}>Iniciar sesión</button>
           )}
-          <span className="menu-mark">☰</span>
+          <button className="menu-toggle" aria-label="Abrir menú" aria-expanded={mobileMenuOpen} onClick={() => setMobileMenuOpen((open) => !open)}>
+            <span /><span /><span />
+          </button>
         </div>
       </header>
 
@@ -147,8 +170,68 @@ export default function Home() {
       <footer className="footer"><span className="brand">TAMAKA<span>.</span></span><span>Turismo que se siente.</span><span>© 2026 Tamaka</span></footer>
       {selected && <OfferModal offer={selected} onClose={() => setSelected(null)} />}
       {authOpen && <AuthModal onClose={() => setAuthOpen(false)} onLogin={login} />}
+      {accountOpen && profile && <AccountModal profile={profile} onClose={() => setAccountOpen(false)} onSaved={setProfile} />}
     </div>
   );
+}
+
+function AccountModal({ profile, onClose, onSaved }: { profile: UserProfile; onClose: () => void; onSaved: (profile: UserProfile) => void }) {
+  const [fullName, setFullName] = useState(profile.fullName);
+  const [phone, setPhone] = useState(profile.phone ?? "");
+  const [address, setAddress] = useState(profile.address ?? "");
+  const [avatarUrl, setAvatarUrl] = useState(profile.avatarUrl ?? "");
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState("");
+
+  async function save(event: FormEvent) {
+    event.preventDefault();
+    setPending(true);
+    setError("");
+    try {
+      const updated = await updateMyProfile({ fullName, phone, address, avatarUrl });
+      onSaved(updated);
+      onClose();
+    } catch (requestError) {
+      setError(getApiErrorMessage(requestError));
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function selectAvatar(file: File | undefined) {
+    if (!file) return;
+    setPending(true);
+    setError("");
+    try {
+      const updated = await uploadAvatar(file);
+      setAvatarUrl(updated.avatarUrl ?? "");
+      onSaved(updated);
+    } catch (requestError) {
+      setError(getApiErrorMessage(requestError));
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return <div className="modal-backdrop" onClick={onClose}>
+    <div className="modal account-modal" onClick={(event) => event.stopPropagation()}>
+      <button className="modal-close" onClick={onClose}>×</button>
+      <p className="eyebrow">Tu cuenta</p>
+      <h2>Editar perfil</h2>
+      <div className="profile-photo">
+        {avatarUrl ? <img src={avatarUrl} alt="" /> : <span>{fullName.slice(0, 1).toUpperCase()}</span>}
+        <label className="upload-button">Cambiar foto<input type="file" accept="image/*" onChange={(event) => void selectAvatar(event.target.files?.[0])} /></label>
+      </div>
+      <form onSubmit={save}>
+        <label>Nombre completo<input value={fullName} onChange={(event) => setFullName(event.target.value)} required /></label>
+        <label>Correo<input value={profile.email} disabled /></label>
+        <label>Teléfono<input value={phone} onChange={(event) => setPhone(event.target.value)} /></label>
+        <label>Dirección<input value={address} onChange={(event) => setAddress(event.target.value)} /></label>
+        {error && <div className="notice error">{error}</div>}
+        <button className="dark-button" disabled={pending}>{pending ? "Guardando..." : "Guardar cambios"}</button>
+      </form>
+    </div>
+  </div>;
 }
 
 function OfferCard({ offer, reason, onClick }: { offer: Offer; reason?: string; onClick: () => void }) {
