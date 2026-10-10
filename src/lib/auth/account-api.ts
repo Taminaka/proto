@@ -22,3 +22,12 @@ export async function uploadAvatar(file: File): Promise<UserProfile> {
   const response = await apiClient.post<UserProfile>("/accounts/me/avatar", formData);
   return response.data;
 }
+
+export async function uploadContentImage(file: File, folder: "attractions" | "commerces" | "services" | "events"): Promise<string> {
+  const formData = new FormData();
+  formData.append("file", file);
+  const response = await apiClient.post<{ url: string }>("/storage/upload", formData, {
+    params: { folder },
+  });
+  return response.data.url;
+}
