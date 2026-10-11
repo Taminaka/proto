@@ -12,6 +12,7 @@ export type Offer = {
   status?: string;
   occupancyLevel?: "LOW" | "MEDIUM" | "HIGH";
   currentOccupancy?: number;
+  capacity?: number;
   categoryNames?: string[];
   price?: number;
   durationMinutes?: number;
