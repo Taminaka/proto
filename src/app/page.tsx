@@ -278,7 +278,7 @@ function ManagementPanel({ roles, onClose }: { roles: UserProfile["roles"]; onCl
 
   const availableTypes = [
     ...(isGestor ? [{ value: "attractions" as OfferType, label: "Atractivos" }, { value: "events" as OfferType, label: "Eventos" }] : []),
-    ...(isOperator ? [{ value: "commerces" as OfferType, label: "Comercios" }, { value: "services" as OfferType, label: "Servicios" }] : []),
+    ...(isOperator ? [{ value: "commerces" as OfferType, label: "Comercios" }, { value: "services" as OfferType, label: "Servicios" }, { value: "events" as OfferType, label: "Eventos de comercio" }] : []),
   ];
 
   async function load() {
@@ -324,9 +324,10 @@ function ManagementPanel({ roles, onClose }: { roles: UserProfile["roles"]; onCl
       if (type === "attractions") Object.assign(payload, { address: form.address || null, capacity: form.capacity ? Number(form.capacity) : null, images: [] });
       if (type === "commerces") Object.assign(payload, { address: form.address || null, images: [], schedules: [], phone: null, email: null, website: null });
       if (type === "services") Object.assign(payload, { price: form.price ? Number(form.price) : null, durationMinutes: 60, images: [], isVisible: true });
-      if (type === "events") Object.assign(payload, { eventType: form.eventType, startDate: new Date(form.startDate).toISOString(), endDate: new Date(form.endDate).toISOString(), location: form.location || null, images: [] });
-      if (editing) await updateManaged(type, editing.id, payload, type === "events" && isGestor && !roles.includes("OPERADOR"));
-      else await createManaged(type, payload, type === "services" ? Number(commerceId) : undefined);
+      const destinationEvent = type === "events" && isGestor && !roles.includes("OPERADOR");
+      if (type === "events") Object.assign(payload, { eventType: destinationEvent ? "DESTINO" : "COMERCIO", startDate: new Date(form.startDate).toISOString(), endDate: new Date(form.endDate).toISOString(), location: form.location || null, images: [], ...(destinationEvent ? {} : { commerceId: Number(commerceId) }) });
+      if (editing) await updateManaged(type, editing.id, payload, destinationEvent);
+      else await createManaged(type, payload, type === "services" || type === "events" ? Number(commerceId) : undefined, destinationEvent ? "destination" : "commerce");
       setNotice(editing ? "Cambios guardados." : "Elemento creado."); resetForm(); await load();
     } catch (requestError) { setError(getApiErrorMessage(requestError)); } finally { setPending(false); }
   }
@@ -363,7 +364,7 @@ function ManagementPanel({ roles, onClose }: { roles: UserProfile["roles"]; onCl
         <select value={type} onChange={(event) => { setType(event.target.value as OfferType); resetForm(); }}>
           {availableTypes.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
         </select>
-        {type === "services" && <select value={commerceId} onChange={(event) => setCommerceId(event.target.value)}><option value="">Selecciona comercio</option>{commerceOptions.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select>}
+        {(type === "services" || (type === "events" && !isGestor)) && <select value={commerceId} onChange={(event) => setCommerceId(event.target.value)}><option value="">Selecciona comercio</option>{commerceOptions.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select>}
         <button className="filter-button" onClick={() => { resetForm(); }}>Nuevo</button>
       </div>
       {error && <div className="notice error">{error}</div>}
@@ -375,15 +376,15 @@ function ManagementPanel({ roles, onClose }: { roles: UserProfile["roles"]; onCl
         </div>
         <form className="management-form" onSubmit={submit}>
           <h3>{editing ? "Editar" : "Crear"} {availableTypes.find((option) => option.value === type)?.label}</h3>
-          {type === "services" && !commerceId && <p className="notice">Selecciona primero un comercio.</p>}
+          {(type === "services" || (type === "events" && !isGestor)) && !commerceId && <p className="notice">Selecciona primero un comercio.</p>}
           <label>Nombre<input required value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} /></label>
           <label>Descripción<textarea value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} /></label>
           {(type === "attractions" || type === "commerces") && <label>Dirección<input value={form.address} onChange={(event) => setForm({ ...form, address: event.target.value })} /></label>}
           {type === "attractions" && <label>Capacidad<input type="number" min="1" value={form.capacity} onChange={(event) => setForm({ ...form, capacity: event.target.value })} /></label>}
           {type === "services" && <label>Precio<input type="number" min="0" value={form.price} onChange={(event) => setForm({ ...form, price: event.target.value })} /></label>}
-          {type === "events" && <><label>Tipo<select value={form.eventType} onChange={(event) => setForm({ ...form, eventType: event.target.value })}><option>CULTURAL</option><option>SPORTS</option><option>CONCERT</option><option>FESTIVAL</option><option>OTHER</option></select></label><label>Inicio<input type="datetime-local" required value={form.startDate} onChange={(event) => setForm({ ...form, startDate: event.target.value })} /></label><label>Fin<input type="datetime-local" required value={form.endDate} onChange={(event) => setForm({ ...form, endDate: event.target.value })} /></label><label>Ubicación<input value={form.location} onChange={(event) => setForm({ ...form, location: event.target.value })} /></label></>}
+          {type === "events" && <><label>Inicio<input type="datetime-local" required value={form.startDate} onChange={(event) => setForm({ ...form, startDate: event.target.value })} /></label><label>Fin<input type="datetime-local" required value={form.endDate} onChange={(event) => setForm({ ...form, endDate: event.target.value })} /></label><label>Ubicación<input value={form.location} onChange={(event) => setForm({ ...form, location: event.target.value })} /></label></>}
           {type !== "services" && <label>Categorías (IDs separados por coma)<input value={form.categoryIds} onChange={(event) => setForm({ ...form, categoryIds: event.target.value })} placeholder="1, 2" /></label>}
-          <button className="dark-button" disabled={pending || (type === "services" && !commerceId)}>{pending ? "Guardando..." : editing ? "Guardar cambios" : "Crear"}</button>
+          <button className="dark-button" disabled={pending || ((type === "services" || (type === "events" && !isGestor)) && !commerceId)}>{pending ? "Guardando..." : editing ? "Guardar cambios" : "Crear"}</button>
         </form>
       </div>
       {isAdmin && <div className="category-admin"><h3>Categorías</h3><form onSubmit={saveCategoryForm}><input required placeholder="Nombre" value={categoryForm.name} onChange={(event) => setCategoryForm({ ...categoryForm, name: event.target.value })} /><input placeholder="Descripción" value={categoryForm.description} onChange={(event) => setCategoryForm({ ...categoryForm, description: event.target.value })} /><button className="filter-button" disabled={pending}>Crear categoría</button></form><div className="category-list">{categories.map((category) => <span key={category.id}>{category.name}<button onClick={() => void removeCategory(category.id)}>×</button></span>)}</div></div>}

@@ -24,9 +24,9 @@ export async function listCommerceServices(commerceId: number): Promise<Offer[]>
   return response.data;
 }
 
-export async function createManaged(type: OfferType, payload: ManagementPayload, commerceId?: number): Promise<Offer> {
+export async function createManaged(type: OfferType, payload: ManagementPayload, commerceId?: number, eventMode: "destination" | "commerce" = "destination"): Promise<Offer> {
   const path = type === "attractions" ? "/attractions"
-    : type === "events" ? "/events/destination"
+    : type === "events" ? `/events/${eventMode}`
       : type === "commerces" ? "/commerces"
         : `/commerces/${commerceId}/services`;
   const response = await apiClient.post<Offer>(path, payload);
