@@ -19,6 +19,7 @@ type AuthContextValue = {
   isAuthenticated: boolean;
   login: (request: LoginRequest) => Promise<AuthSession>;
   logout: () => Promise<void>;
+  updateSession: (session: AuthSession) => void;
 };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -52,6 +53,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const updateSession = useCallback((nextSession: AuthSession) => {
+    saveSession(nextSession);
+    setSession(nextSession);
+  }, []);
+
   const value = useMemo(
     () => ({
       session,
@@ -59,8 +65,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isAuthenticated: Boolean(session),
       login,
       logout,
+      updateSession,
     }),
-    [isLoading, login, logout, session],
+    [isLoading, login, logout, session, updateSession],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -14,6 +14,7 @@ export type Offer = {
   currentOccupancy?: number;
   capacity?: number;
   categoryNames?: string[];
+  categoryIds?: number[];
   price?: number;
   durationMinutes?: number;
   commerceId?: number;

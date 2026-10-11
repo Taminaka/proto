@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { getApiErrorMessage } from "@/lib/api/client";
 import { useAuth } from "@/lib/auth/context";
-import { getMyProfile, updateMyProfile, uploadAvatar } from "@/lib/auth/account-api";
+import { enableOperatorMode, getMyProfile, switchMode, updateMyProfile, uploadAvatar, uploadContentImage } from "@/lib/auth/account-api";
 import type { UserProfile } from "@/lib/auth/types";
 import { getPublicCategories, type Category } from "@/lib/catalog/api";
 import { listOffers, type Offer, type OfferType, getOffer, getRecommendations } from "@/lib/catalog/offer-api";
@@ -17,7 +17,7 @@ const tabs: { key: OfferType; label: string }[] = [
 ];
 
 export default function Home() {
-  const { session, login, logout } = useAuth();
+  const { session, login, logout, updateSession } = useAuth();
   const [active, setActive] = useState<OfferType>("attractions");
   const [offers, setOffers] = useState<Offer[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -43,6 +43,7 @@ export default function Home() {
     } catch (requestError) {
       setError(getApiErrorMessage(requestError));
     }
+
   }
 
   useEffect(() => {
@@ -162,7 +163,7 @@ export default function Home() {
 
         <section className="section" id="recommendations">
           <div className="section-heading"><div><p className="eyebrow">Basado en reglas</p><h2>Recomendaciones</h2></div></div>
-          {recommendations.length ? <div className="offer-grid">{recommendations.map((entry) => <OfferCard key={entry.item.id} offer={entry.item} reason={entry.reason} onClick={() => void openOffer(entry.item)} />)}</div> : <p className="muted-copy">Inicia sesión para recibir recomendaciones personalizadas.</p>}
+          {recommendations.length ? <div className="offer-grid">{recommendations.map((entry) => <OfferCard key={entry.item.id} offer={entry.item} reason={entry.reason} onClick={() => void openOffer(entry.item)} />)}</div> : <p className="muted-copy">{session ? "Aún no hay recomendaciones disponibles." : "Inicia sesión para recibir recomendaciones personalizadas."}</p>}
         </section>
 
         {session && <AccountStrip sessionName={session.fullName} />}
@@ -171,19 +172,20 @@ export default function Home() {
       <footer className="footer"><span className="brand">TAMAKA<span>.</span></span><span>Turismo que se siente.</span><span>© 2026 Tamaka</span></footer>
       {selected && <OfferModal offer={selected} onClose={() => setSelected(null)} />}
       {authOpen && <AuthModal onClose={() => setAuthOpen(false)} onLogin={login} />}
-      {accountOpen && profile && <AccountModal profile={profile} onClose={() => setAccountOpen(false)} onSaved={setProfile} />}
+      {accountOpen && profile && session && <AccountModal profile={profile} onClose={() => setAccountOpen(false)} onSaved={setProfile} onSessionChanged={updateSession} session={session} />}
       {managementOpen && session && <ManagementPanel roles={session.roles} onClose={() => setManagementOpen(false)} />}
     </div>
   );
 }
 
-function AccountModal({ profile, onClose, onSaved }: { profile: UserProfile; onClose: () => void; onSaved: (profile: UserProfile) => void }) {
+function AccountModal({ profile, onClose, onSaved, onSessionChanged, session }: { profile: UserProfile; onClose: () => void; onSaved: (profile: UserProfile) => void; onSessionChanged: (session: NonNullable<ReturnType<typeof useAuth>["session"]>) => void; session: NonNullable<ReturnType<typeof useAuth>["session"]> }) {
   const [fullName, setFullName] = useState(profile.fullName);
   const [phone, setPhone] = useState(profile.phone ?? "");
   const [address, setAddress] = useState(profile.address ?? "");
   const [avatarUrl, setAvatarUrl] = useState(profile.avatarUrl ?? "");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
+  const [operatorForm, setOperatorForm] = useState({ businessName: "", businessNit: "", businessAddress: "", businessPhone: "" });
 
   async function save(event: FormEvent) {
     event.preventDefault();
@@ -215,6 +217,25 @@ function AccountModal({ profile, onClose, onSaved }: { profile: UserProfile; onC
     }
   }
 
+  async function activateOperatorMode(event: FormEvent) {
+    event.preventDefault(); setPending(true); setError("");
+    try {
+      await enableOperatorMode(operatorForm);
+      const updated = await getMyProfile();
+      onSaved(updated);
+      onSessionChanged({ ...session, roles: updated.roles, activeMode: updated.activeMode, fullName: updated.fullName });
+    } catch (requestError) { setError(getApiErrorMessage(requestError)); } finally { setPending(false); }
+  }
+
+  async function changeMode(mode: "TURISTA" | "OPERADOR") {
+    setPending(true); setError("");
+    try {
+      await switchMode(mode);
+      onSaved({ ...profile, activeMode: mode });
+      onSessionChanged({ ...session, activeMode: mode });
+    } catch (requestError) { setError(getApiErrorMessage(requestError)); } finally { setPending(false); }
+  }
+
   return <div className="modal-backdrop" onClick={onClose}>
     <div className="modal account-modal" onClick={(event) => event.stopPropagation()}>
       <button className="modal-close" onClick={onClose}>×</button>
@@ -232,12 +253,13 @@ function AccountModal({ profile, onClose, onSaved }: { profile: UserProfile; onC
         {error && <div className="notice error">{error}</div>}
         <button className="dark-button" disabled={pending}>{pending ? "Guardando..." : "Guardar cambios"}</button>
       </form>
+      {profile.roles.includes("OPERADOR") ? <div className="mode-switcher"><p className="eyebrow">Modo activo: {profile.activeMode}</p><button type="button" className="filter-button" disabled={pending} onClick={() => void changeMode(profile.activeMode === "OPERADOR" ? "TURISTA" : "OPERADOR")}>Cambiar a modo {profile.activeMode === "OPERADOR" ? "turista" : "operador"}</button></div> : <form className="operator-form" onSubmit={activateOperatorMode}><p className="eyebrow">Modo operador</p><h3>Habilitar mi operación</h3><label>Nombre del negocio<input required value={operatorForm.businessName} onChange={(event) => setOperatorForm({ ...operatorForm, businessName: event.target.value })} /></label><label>NIT<input required value={operatorForm.businessNit} onChange={(event) => setOperatorForm({ ...operatorForm, businessNit: event.target.value })} /></label><label>Dirección<input value={operatorForm.businessAddress} onChange={(event) => setOperatorForm({ ...operatorForm, businessAddress: event.target.value })} /></label><label>Teléfono<input value={operatorForm.businessPhone} onChange={(event) => setOperatorForm({ ...operatorForm, businessPhone: event.target.value })} /></label><button className="dark-button" disabled={pending}>{pending ? "Activando..." : "Habilitar modo operador"}</button></form>}
     </div>
   </div>;
 }
 
 function OfferCard({ offer, reason, onClick }: { offer: Offer; reason?: string; onClick: () => void }) {
-  return <button className="offer-card" onClick={onClick}><div className="card-image"><span>{offer.name.slice(0, 1)}</span>{offer.occupancyLevel && <b className={`occupancy ${offer.occupancyLevel.toLowerCase()}`}>{offer.occupancyLevel}</b>}</div><div className="card-body"><p className="card-type">{offer.categoryNames?.[0] ?? "Experiencia"}</p><h3>{offer.name}</h3><p className="card-description">{offer.description ?? offer.address ?? "Descubre esta experiencia en Santa Marta."}</p>{reason && <p className="reason">“{reason}”</p>}<span className="card-link">Ver detalle →</span></div></button>;
+  return <button className="offer-card" onClick={onClick}><div className="card-image">{offer.images?.[0] ? <img src={offer.images[0]} alt="" /> : <span>{offer.name.slice(0, 1)}</span>}{offer.occupancyLevel && <b className={`occupancy ${offer.occupancyLevel.toLowerCase()}`}>{offer.occupancyLevel}</b>}</div><div className="card-body"><p className="card-type">{offer.categoryNames?.[0] ?? "Experiencia"}</p><h3>{offer.name}</h3><p className="card-description">{offer.description ?? offer.address ?? "Descubre esta experiencia en Santa Marta."}</p>{reason && <p className="reason">“{reason}”</p>}<span className="card-link">Ver detalle →</span></div></button>;
 }
 
 function OfferModal({ offer, onClose }: { offer: Offer; onClose: () => void }) {
@@ -257,7 +279,7 @@ function AuthModal({ onClose, onLogin }: { onClose: () => void; onLogin: (reques
 }
 
 function AccountStrip({ sessionName }: { sessionName: string }) {
-  return <section className="account-strip" id="operator"><div><p className="eyebrow">Sesión activa</p><h2>Hola, {sessionName.split(" ")[0]}.</h2><p>Desde aquí podrás gestionar tu perfil y los módulos disponibles según tu rol.</p></div><a className="dark-button" href="#account">Ir a mi cuenta →</a></section>;
+  return <section className="account-strip" id="operator"><div><p className="eyebrow">Sesión activa</p><h2>Hola, {sessionName.split(" ")[0]}.</h2><p>Desde aquí podrás gestionar tu perfil y los módulos disponibles según tu rol.</p></div><span className="dark-button">Tu cuenta está activa</span></section>;
 }
 
 function ManagementPanel({ roles, onClose }: { roles: UserProfile["roles"]; onClose: () => void }) {
@@ -270,7 +292,9 @@ function ManagementPanel({ roles, onClose }: { roles: UserProfile["roles"]; onCl
   const [commerceOptions, setCommerceOptions] = useState<Offer[]>([]);
   const [editing, setEditing] = useState<Offer | null>(null);
   const [commerceId, setCommerceId] = useState("");
-  const [form, setForm] = useState({ name: "", description: "", address: "", price: "", capacity: "", categoryIds: "", eventType: "CULTURAL", startDate: "", endDate: "", location: "" });
+  const [form, setForm] = useState({ name: "", description: "", address: "", price: "", capacity: "", eventType: "CULTURAL", startDate: "", endDate: "", location: "" });
+  const [selectedCategoryIds, setSelectedCategoryIds] = useState<number[]>([]);
+  const [imageUrls, setImageUrls] = useState<string[]>([]);
   const [categoryForm, setCategoryForm] = useState({ name: "", description: "" });
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -286,10 +310,10 @@ function ManagementPanel({ roles, onClose }: { roles: UserProfile["roles"]; onCl
       setError("");
       const data = type === "services" && commerceId
         ? await listCommerceServices(Number(commerceId))
-        : await listManaged(type, type === "commerces" && !isAdmin);
+        : await listManaged(type, (type === "commerces" || type === "events") && !isAdmin);
       setItems(data);
       if (type === "services") setCommerceOptions(await listManaged("commerces", !isAdmin));
-      if (isAdmin) setCategories(await listCategories(true));
+      setCategories(await listCategories(isAdmin));
     } catch (requestError) {
       setError(getApiErrorMessage(requestError));
     }
@@ -300,7 +324,9 @@ function ManagementPanel({ roles, onClose }: { roles: UserProfile["roles"]; onCl
 
   function resetForm() {
     setEditing(null);
-    setForm({ name: "", description: "", address: "", price: "", capacity: "", categoryIds: "", eventType: "CULTURAL", startDate: "", endDate: "", location: "" });
+    setForm({ name: "", description: "", address: "", price: "", capacity: "", eventType: "CULTURAL", startDate: "", endDate: "", location: "" });
+    setSelectedCategoryIds([]);
+    setImageUrls([]);
   }
 
   function edit(item: Offer) {
@@ -308,24 +334,25 @@ function ManagementPanel({ roles, onClose }: { roles: UserProfile["roles"]; onCl
     setForm({
       name: item.name ?? "", description: item.description ?? "", address: item.address ?? "",
       price: item.price?.toString() ?? "", capacity: item.capacity?.toString() ?? "",
-      categoryIds: "", eventType: item.eventType ?? "CULTURAL", startDate: item.startDate?.slice(0, 16) ?? "",
+      eventType: item.eventType ?? "CULTURAL", startDate: item.startDate?.slice(0, 16) ?? "",
       endDate: item.endDate?.slice(0, 16) ?? "", location: item.location ?? item.address ?? "",
     });
+    setSelectedCategoryIds(item.categoryIds ?? []);
+    setImageUrls(item.images ?? []);
   }
 
   async function submit(event: FormEvent) {
     event.preventDefault();
     setPending(true); setError(""); setNotice("");
     try {
-      const categoryIds = form.categoryIds.split(",").map(Number).filter(Boolean);
       const payload: Record<string, unknown> = {
-        name: form.name, description: form.description || null, categoryIds,
+        name: form.name, description: form.description || null, categoryIds: selectedCategoryIds, images: imageUrls,
       };
-      if (type === "attractions") Object.assign(payload, { address: form.address || null, capacity: form.capacity ? Number(form.capacity) : null, images: [] });
-      if (type === "commerces") Object.assign(payload, { address: form.address || null, images: [], schedules: [], phone: null, email: null, website: null });
-      if (type === "services") Object.assign(payload, { price: form.price ? Number(form.price) : null, durationMinutes: 60, images: [], isVisible: true });
+      if (type === "attractions") Object.assign(payload, { address: form.address || null, capacity: form.capacity ? Number(form.capacity) : null });
+      if (type === "commerces") Object.assign(payload, { address: form.address || null, schedules: [], phone: null, email: null, website: null });
+      if (type === "services") Object.assign(payload, { price: form.price ? Number(form.price) : null, durationMinutes: 60, isVisible: true });
       const destinationEvent = type === "events" && isGestor && !roles.includes("OPERADOR");
-      if (type === "events") Object.assign(payload, { eventType: destinationEvent ? "DESTINO" : "COMERCIO", startDate: new Date(form.startDate).toISOString(), endDate: new Date(form.endDate).toISOString(), location: form.location || null, images: [], ...(destinationEvent ? {} : { commerceId: Number(commerceId) }) });
+      if (type === "events") Object.assign(payload, { eventType: destinationEvent ? "DESTINO" : "COMERCIO", startDate: new Date(form.startDate).toISOString(), endDate: new Date(form.endDate).toISOString(), location: form.location || null, ...(destinationEvent ? {} : { commerceId: Number(commerceId) }) });
       if (editing) await updateManaged(type, editing.id, payload, destinationEvent);
       else await createManaged(type, payload, type === "services" || type === "events" ? Number(commerceId) : undefined, destinationEvent ? "destination" : "commerce");
       setNotice(editing ? "Cambios guardados." : "Elemento creado."); resetForm(); await load();
@@ -353,6 +380,19 @@ function ManagementPanel({ roles, onClose }: { roles: UserProfile["roles"]; onCl
     if (!window.confirm("¿Eliminar esta categoría?")) return;
     try { await deleteCategory(id); setNotice("Categoría eliminada."); await load(); }
     catch (requestError) { setError(getApiErrorMessage(requestError)); }
+  }
+
+  async function addImages(files: FileList | null) {
+    if (!files?.length) return;
+    setPending(true); setError("");
+    try {
+      const folder = type === "events" ? "events" : type;
+      const uploaded = await Promise.all(Array.from(files).map((file) => uploadContentImage(file, folder)));
+      setImageUrls((current) => [...current, ...uploaded]);
+      setNotice(`${uploaded.length} imagen(es) subida(s).`);
+    } catch (requestError) {
+      setError(getApiErrorMessage(requestError));
+    } finally { setPending(false); }
   }
 
   return <div className="modal-backdrop" onClick={onClose}>
@@ -383,7 +423,10 @@ function ManagementPanel({ roles, onClose }: { roles: UserProfile["roles"]; onCl
           {type === "attractions" && <label>Capacidad<input type="number" min="1" value={form.capacity} onChange={(event) => setForm({ ...form, capacity: event.target.value })} /></label>}
           {type === "services" && <label>Precio<input type="number" min="0" value={form.price} onChange={(event) => setForm({ ...form, price: event.target.value })} /></label>}
           {type === "events" && <><label>Inicio<input type="datetime-local" required value={form.startDate} onChange={(event) => setForm({ ...form, startDate: event.target.value })} /></label><label>Fin<input type="datetime-local" required value={form.endDate} onChange={(event) => setForm({ ...form, endDate: event.target.value })} /></label><label>Ubicación<input value={form.location} onChange={(event) => setForm({ ...form, location: event.target.value })} /></label></>}
-          {type !== "services" && <label>Categorías (IDs separados por coma)<input value={form.categoryIds} onChange={(event) => setForm({ ...form, categoryIds: event.target.value })} placeholder="1, 2" /></label>}
+          <label>Categorías</label>
+          <div className="category-picker">{categories.filter((category) => category.status === "ACTIVE").map((category) => <button type="button" key={category.id} className={selectedCategoryIds.includes(category.id) ? "category-choice selected" : "category-choice"} onClick={() => setSelectedCategoryIds((ids) => ids.includes(category.id) ? ids.filter((id) => id !== category.id) : [...ids, category.id])}>{category.name}</button>)}</div>
+          <label>Imágenes<input type="file" accept="image/*" multiple onChange={(event) => void addImages(event.target.files)} /></label>
+          {imageUrls.length > 0 && <div className="image-list">{imageUrls.map((url) => <span key={url}><img src={url} alt="" /><button type="button" onClick={() => setImageUrls((urls) => urls.filter((item) => item !== url))}>×</button></span>)}</div>}
           <button className="dark-button" disabled={pending || ((type === "services" || (type === "events" && !isGestor)) && !commerceId)}>{pending ? "Guardando..." : editing ? "Guardar cambios" : "Crear"}</button>
         </form>
       </div>

@@ -6,14 +6,14 @@ export type ManagementPayload = Record<string, unknown>;
 
 const adminPaths: Record<OfferType, string> = {
   attractions: "/attractions/admin",
-  commerces: "/commerces/public",
-  services: "/services/public",
+  commerces: "/commerces/admin",
+  services: "/services/admin",
   events: "/events/admin",
 };
 
 export async function listManaged(type: OfferType, own = false): Promise<Offer[]> {
   const path = type === "commerces" && own ? "/commerces/mine"
-    : type === "services" ? "/services/public"
+    : type === "events" && own ? "/events/mine"
       : adminPaths[type];
   const response = await apiClient.get<Offer[]>(path);
   return response.data;

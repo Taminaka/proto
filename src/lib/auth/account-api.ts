@@ -23,6 +23,19 @@ export async function uploadAvatar(file: File): Promise<UserProfile> {
   return response.data;
 }
 
+export async function enableOperatorMode(input: {
+  businessName: string;
+  businessNit: string;
+  businessAddress: string;
+  businessPhone: string;
+}): Promise<void> {
+  await apiClient.post("/accounts/me/operator-mode", input);
+}
+
+export async function switchMode(mode: "TURISTA" | "OPERADOR"): Promise<void> {
+  await apiClient.put("/accounts/me/mode", { mode });
+}
+
 export async function uploadContentImage(file: File, folder: "attractions" | "commerces" | "services" | "events"): Promise<string> {
   const formData = new FormData();
   formData.append("file", file);
