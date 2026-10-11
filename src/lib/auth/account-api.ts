@@ -1,5 +1,5 @@
 import { apiClient } from "../api/client";
-import type { UserProfile } from "./types";
+import type { AuthSession, UserProfile } from "./types";
 
 export async function getMyProfile(): Promise<UserProfile> {
   const response = await apiClient.get<UserProfile>("/accounts/me");
@@ -28,12 +28,14 @@ export async function enableOperatorMode(input: {
   businessNit: string;
   businessAddress: string;
   businessPhone: string;
-}): Promise<void> {
-  await apiClient.post("/accounts/me/operator-mode", input);
+}): Promise<AuthSession> {
+  const response = await apiClient.post<AuthSession>("/accounts/me/operator-mode", input);
+  return response.data;
 }
 
-export async function switchMode(mode: "TURISTA" | "OPERADOR"): Promise<void> {
-  await apiClient.put("/accounts/me/mode", { mode });
+export async function switchMode(mode: "TURISTA" | "OPERADOR"): Promise<AuthSession> {
+  const response = await apiClient.put<AuthSession>("/accounts/me/mode", { mode });
+  return response.data;
 }
 
 export async function uploadContentImage(file: File, folder: "attractions" | "commerces" | "services" | "events"): Promise<string> {

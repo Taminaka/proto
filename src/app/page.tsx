@@ -172,13 +172,13 @@ export default function Home() {
       <footer className="footer"><span className="brand">TAMAKA<span>.</span></span><span>Turismo que se siente.</span><span>© 2026 Tamaka</span></footer>
       {selected && <OfferModal offer={selected} onClose={() => setSelected(null)} />}
       {authOpen && <AuthModal onClose={() => setAuthOpen(false)} onLogin={login} />}
-      {accountOpen && profile && session && <AccountModal profile={profile} onClose={() => setAccountOpen(false)} onSaved={setProfile} onSessionChanged={updateSession} session={session} />}
+      {accountOpen && profile && session && <AccountModal profile={profile} onClose={() => setAccountOpen(false)} onSaved={setProfile} onSessionChanged={updateSession} />}
       {managementOpen && session && <ManagementPanel roles={session.roles} onClose={() => setManagementOpen(false)} />}
     </div>
   );
 }
 
-function AccountModal({ profile, onClose, onSaved, onSessionChanged, session }: { profile: UserProfile; onClose: () => void; onSaved: (profile: UserProfile) => void; onSessionChanged: (session: NonNullable<ReturnType<typeof useAuth>["session"]>) => void; session: NonNullable<ReturnType<typeof useAuth>["session"]> }) {
+function AccountModal({ profile, onClose, onSaved, onSessionChanged }: { profile: UserProfile; onClose: () => void; onSaved: (profile: UserProfile) => void; onSessionChanged: (session: NonNullable<ReturnType<typeof useAuth>["session"]>) => void }) {
   const [fullName, setFullName] = useState(profile.fullName);
   const [phone, setPhone] = useState(profile.phone ?? "");
   const [address, setAddress] = useState(profile.address ?? "");
@@ -220,19 +220,19 @@ function AccountModal({ profile, onClose, onSaved, onSessionChanged, session }: 
   async function activateOperatorMode(event: FormEvent) {
     event.preventDefault(); setPending(true); setError("");
     try {
-      await enableOperatorMode(operatorForm);
+      const nextSession = await enableOperatorMode(operatorForm);
       const updated = await getMyProfile();
       onSaved(updated);
-      onSessionChanged({ ...session, roles: updated.roles, activeMode: updated.activeMode, fullName: updated.fullName });
+      onSessionChanged(nextSession);
     } catch (requestError) { setError(getApiErrorMessage(requestError)); } finally { setPending(false); }
   }
 
   async function changeMode(mode: "TURISTA" | "OPERADOR") {
     setPending(true); setError("");
     try {
-      await switchMode(mode);
+      const nextSession = await switchMode(mode);
       onSaved({ ...profile, activeMode: mode });
-      onSessionChanged({ ...session, activeMode: mode });
+      onSessionChanged(nextSession);
     } catch (requestError) { setError(getApiErrorMessage(requestError)); } finally { setPending(false); }
   }
 
