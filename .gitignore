@@ -34,3 +34,10 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# respaldos locales de refactor
+*.bak
+
+# IDE
+.idea/
+.vscode/

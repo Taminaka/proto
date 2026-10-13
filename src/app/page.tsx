@@ -4,10 +4,15 @@ import { FormEvent, useEffect, useState } from "react";
 import { getApiErrorMessage } from "@/lib/api/client";
 import { useAuth } from "@/lib/auth/context";
 import { enableOperatorMode, getMyProfile, switchMode, updateMyProfile, uploadAvatar, uploadContentImage } from "@/lib/auth/account-api";
-import type { UserProfile } from "@/lib/auth/types";
+import type { Role, UserProfile } from "@/lib/auth/types";
 import { getPublicCategories, type Category } from "@/lib/catalog/api";
 import { listOffers, type Offer, type OfferType, getOffer, getRecommendations } from "@/lib/catalog/offer-api";
 import { createManaged, deactivateManaged, deleteCategory, listCategories, listCommerceServices, listManaged, saveCategory, updateManaged, updateStatus } from "@/lib/catalog/management-api";
+import { HeroCarousel } from "@/components/HeroCarousel";
+import { ModalCarousel } from "@/components/ModalCarousel";
+import { ArrowButton } from "@/components/ui/arrow-button";
+import { SpecularButton } from "@/components/SpecularButton";
+import { getPortada } from "@/lib/destinos";
 
 const tabs: { key: OfferType; label: string }[] = [
   { key: "attractions", label: "Atractivos" },
@@ -15,6 +20,33 @@ const tabs: { key: OfferType; label: string }[] = [
   { key: "services", label: "Servicios" },
   { key: "events", label: "Eventos" },
 ];
+
+/* Orden de privilegio: el rol principal es el de mayor jerarquia. */
+const ROLE_ORDER: Role[] = ["ADMIN", "GESTOR", "OPERADOR", "TURISTA"];
+
+function primaryRole(roles: Role[] | undefined): Role | null {
+  if (!roles?.length) return null;
+  return ROLE_ORDER.find((role) => roles.includes(role)) ?? roles[0] ?? null;
+}
+
+/* Badge de identidad. Es puramente presentacional: lee el rol, elige color y
+   no altera ninguna condicion, llamada a la API ni flujo de la aplicacion. */
+function RoleBadges({ roles, showAll = false }: { roles: Role[]; showAll?: boolean }) {
+  if (!roles?.length) return null;
+  const shown = showAll
+    ? roles
+    : [primaryRole(roles)].filter((role): role is Role => role !== null);
+  if (!shown.length) return null;
+  return (
+    <span className="role-badge-group">
+      {shown.map((role) => (
+        <span className={`role-badge role-badge--${role}`} key={role}>
+          {role}
+        </span>
+      ))}
+    </span>
+  );
+}
 
 export default function Home() {
   const { session, login, logout, updateSession } = useAuth();
@@ -107,6 +139,7 @@ export default function Home() {
           {session ? (
             <>
               <button className="user-label account-link" onClick={() => void openAccount()}>{session.fullName}</button>
+              <RoleBadges roles={session.roles} />
               <button className="link-button" onClick={() => void logout()}>Salir</button>
             </>
           ) : (
@@ -125,52 +158,52 @@ export default function Home() {
             <h1>Encuentra tu próxima<br /><em>experiencia.</em></h1>
             <p className="hero-text">Explora lugares, comercios, servicios y eventos para vivir Santa Marta a tu manera.</p>
             <form className="search-box" onSubmit={(event) => { event.preventDefault(); void loadOffers(); }}>
-              <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="¿Qué quieres descubrir?" />
+              <svg className="search-box__icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 30 30" aria-hidden="true" focusable="false">
+                <path d="M13 3C7.489 3 3 7.489 3 13s4.489 10 10 10a9.95 9.95 0 0 0 6.322-2.264l5.971 5.971a1 1 0 1 0 1.414-1.414l-5.97-5.97A9.95 9.95 0 0 0 23 13c0-5.511-4.489-10-10-10m0 2c4.43 0 8 3.57 8 8s-3.57 8-8 8-8-3.57-8-8 3.57-8 8-8" />
+              </svg>
+              <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="¿Qué quieres descubrir?" aria-label="Buscar ofertas" />
               <button type="submit">Buscar</button>
             </form>
           </div>
-          <div className="hero-art" aria-label="Imagen de destino">
-            <div className="art-label">DESTINO<br /><strong>SANTA MARTA</strong></div>
-          </div>
+          <HeroCarousel />
         </section>
 
         <section className="section" id="explore">
           <div className="section-heading">
             <div><p className="eyebrow">Oferta turística</p><h2>Explora Santa Marta</h2></div>
-            <button className="text-action" onClick={() => void loadOffers()}>Ver todo →</button>
+            <ArrowButton className="text-action" onClick={() => void loadOffers()}>Ver todo</ArrowButton>
           </div>
           <div className="tabs">
             {tabs.map((tab) => <button key={tab.key} className={active === tab.key ? "tab active" : "tab"} onClick={() => setActive(tab.key)}>{tab.label}</button>)}
           </div>
-          <div className="filters">
+          <div className="toolbar">
             <select value={categoryId} onChange={(event) => setCategoryId(event.target.value)}>
               <option value="">Todas las categorías</option>
               {categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
             </select>
-            <button className="filter-button" onClick={() => void loadOffers()}>Aplicar filtros</button>
+            <SpecularButton size="md" className="specular-button--toolbar specular-button--sand" radius={999} onClick={() => void loadOffers()}>Aplicar filtros</SpecularButton>
           </div>
           {error && <div className="notice error">{error}</div>}
           <div className="offer-grid">
-            {offers.map((offer) => <OfferCard key={offer.id} offer={offer} onClick={() => void openOffer(offer)} />)}
+            {offers.map((offer) => <OfferCard key={offer.id} offer={offer} tipo={active} onClick={() => void openOffer(offer)} />)}
             {!offers.length && !error && <div className="empty-state">No encontramos resultados para esta búsqueda.</div>}
           </div>
         </section>
 
         <section className="feature-band">
-          <div><p className="eyebrow">Descubre sin planearlo</p><h2>Recomendaciones<br /><em>para ti.</em></h2><p>Encuentra alternativas según tus intereses y el nivel de ocupación actual.</p><button className="dark-button" onClick={() => void loadRecommendations()}>Ver recomendaciones →</button></div>
+          <div><p className="eyebrow">Descubre sin planearlo</p><h2>Recomendaciones<br /><em>para ti.</em></h2><p>Encuentra alternativas según tus intereses y el nivel de ocupación actual.</p><SpecularButton size="md" className="specular-button--sand" radius={999} onClick={() => void loadRecommendations()}>Ver recomendaciones</SpecularButton></div>
           <div className="feature-index">01<br /><span>—</span><br />03</div>
         </section>
 
         <section className="section" id="recommendations">
           <div className="section-heading"><div><p className="eyebrow">Basado en reglas</p><h2>Recomendaciones</h2></div></div>
-          {recommendations.length ? <div className="offer-grid">{recommendations.map((entry) => <OfferCard key={entry.item.id} offer={entry.item} reason={entry.reason} onClick={() => void openOffer(entry.item)} />)}</div> : <p className="muted-copy">{session ? "Aún no hay recomendaciones disponibles." : "Inicia sesión para recibir recomendaciones personalizadas."}</p>}
+          {recommendations.length ? <div className="offer-grid">{recommendations.map((entry) => <OfferCard key={entry.item.id} offer={entry.item} tipo={active} reason={entry.reason} onClick={() => void openOffer(entry.item)} />)}</div> : <p className="muted-copy">{session ? "Aún no hay recomendaciones disponibles." : "Inicia sesión para recibir recomendaciones personalizadas."}</p>}
         </section>
 
-        {session && <AccountStrip sessionName={session.fullName} />}
       </main>
 
       <footer className="footer"><span className="brand">TAMAKA<span>.</span></span><span>Turismo que se siente.</span><span>© 2026 Tamaka</span></footer>
-      {selected && <OfferModal offer={selected} onClose={() => setSelected(null)} />}
+      {selected && <OfferModal offer={selected} tipo={active} onClose={() => setSelected(null)} />}
       {authOpen && <AuthModal onClose={() => setAuthOpen(false)} onLogin={login} />}
       {accountOpen && profile && session && <AccountModal profile={profile} onClose={() => setAccountOpen(false)} onSaved={setProfile} onSessionChanged={updateSession} />}
       {managementOpen && session && <ManagementPanel roles={session.roles} onClose={() => setManagementOpen(false)} />}
@@ -251,19 +284,20 @@ function AccountModal({ profile, onClose, onSaved, onSessionChanged }: { profile
         <label>Teléfono<input value={phone} onChange={(event) => setPhone(event.target.value)} /></label>
         <label>Dirección<input value={address} onChange={(event) => setAddress(event.target.value)} /></label>
         {error && <div className="notice error">{error}</div>}
-        <button className="dark-button" disabled={pending}>{pending ? "Guardando..." : "Guardar cambios"}</button>
+        <SpecularButton type="submit" size="md" className="specular-button--block" radius={999} disabled={pending}>{pending ? "Guardando..." : "Guardar cambios"}</SpecularButton>
       </form>
       {profile.roles.includes("OPERADOR") ? <div className="mode-switcher"><p className="eyebrow">Modo activo: {profile.activeMode}</p><button type="button" className="filter-button" disabled={pending} onClick={() => void changeMode(profile.activeMode === "OPERADOR" ? "TURISTA" : "OPERADOR")}>Cambiar a modo {profile.activeMode === "OPERADOR" ? "turista" : "operador"}</button></div> : <form className="operator-form" onSubmit={activateOperatorMode}><p className="eyebrow">Modo operador</p><h3>Habilitar mi operación</h3><label>Nombre del negocio<input required value={operatorForm.businessName} onChange={(event) => setOperatorForm({ ...operatorForm, businessName: event.target.value })} /></label><label>NIT<input required value={operatorForm.businessNit} onChange={(event) => setOperatorForm({ ...operatorForm, businessNit: event.target.value })} /></label><label>Dirección<input value={operatorForm.businessAddress} onChange={(event) => setOperatorForm({ ...operatorForm, businessAddress: event.target.value })} /></label><label>Teléfono<input value={operatorForm.businessPhone} onChange={(event) => setOperatorForm({ ...operatorForm, businessPhone: event.target.value })} /></label><button className="dark-button" disabled={pending}>{pending ? "Activando..." : "Habilitar modo operador"}</button></form>}
     </div>
   </div>;
 }
 
-function OfferCard({ offer, reason, onClick }: { offer: Offer; reason?: string; onClick: () => void }) {
-  return <button className="offer-card" onClick={onClick}><div className="card-image">{offer.images?.[0] ? <img src={offer.images[0]} alt="" /> : <span>{offer.name.slice(0, 1)}</span>}{offer.occupancyLevel && <b className={`occupancy ${offer.occupancyLevel.toLowerCase()}`}>{offer.occupancyLevel}</b>}</div><div className="card-body"><p className="card-type">{offer.categoryNames?.[0] ?? "Experiencia"}</p><h3>{offer.name}</h3><p className="card-description">{offer.description ?? offer.address ?? "Descubre esta experiencia en Santa Marta."}</p>{reason && <p className="reason">“{reason}”</p>}<span className="card-link">Ver detalle →</span></div></button>;
+function OfferCard({ offer, reason, onClick, tipo }: { offer: Offer; reason?: string; onClick: () => void; tipo: OfferType }) {
+  const portada = getPortada(tipo, offer.id);
+  return <button className="offer-card" onClick={onClick}><div className="card-image">{portada ? <img src={portada} alt="" /> : offer.images?.[0] ? <img src={offer.images[0]} alt="" /> : <span>{offer.name.slice(0, 1)}</span>}{offer.occupancyLevel && <b className={`occupancy ${offer.occupancyLevel.toLowerCase()}`}>{offer.occupancyLevel}</b>}</div><div className="card-body"><p className="card-type">{offer.categoryNames?.[0] ?? "Experiencia"}</p><h3>{offer.name}</h3><p className="card-description">{offer.description ?? offer.address ?? "Descubre esta experiencia en Santa Marta."}</p>{reason && <p className="reason">“{reason}”</p>}<ArrowButton as="span" className="card-arrow">Ver detalle</ArrowButton></div></button>;
 }
 
-function OfferModal({ offer, onClose }: { offer: Offer; onClose: () => void }) {
-  return <div className="modal-backdrop" onClick={onClose}><div className="modal" onClick={(event) => event.stopPropagation()}><button className="modal-close" onClick={onClose}>×</button><div className="modal-image">{offer.name.slice(0, 1)}</div><p className="eyebrow">{offer.categoryNames?.join(" · ") ?? "Oferta turística"}</p><h2>{offer.name}</h2><p>{offer.description ?? "Una experiencia para descubrir Santa Marta."}</p>{offer.address && <p className="modal-detail">⌖ {offer.address}</p>}{offer.occupancyLevel && <p className="modal-detail">Ocupación actual: <strong>{offer.occupancyLevel}</strong></p>}<button className="dark-button" onClick={onClose}>Cerrar detalle</button></div></div>;
+function OfferModal({ offer, onClose, tipo }: { offer: Offer; onClose: () => void; tipo: OfferType }) {
+  return <div className="modal-backdrop" onClick={onClose}><div className="modal" onClick={(event) => event.stopPropagation()}><button className="modal-close" onClick={onClose}>×</button><ModalCarousel imagenes={offer.images} nombre={offer.name} tipo={tipo} id={offer.id} /><p className="eyebrow">{offer.categoryNames?.join(" · ") ?? "Oferta turística"}</p><h2>{offer.name}</h2><p>{offer.description ?? "Una experiencia para descubrir Santa Marta."}</p>{offer.address && <p className="modal-detail">⌖ {offer.address}</p>}{offer.occupancyLevel && <p className="modal-detail">Ocupación actual: <strong>{offer.occupancyLevel}</strong></p>}<SpecularButton size="md" radius={999} onClick={onClose}>Cerrar detalle</SpecularButton></div></div>;
 }
 
 function AuthModal({ onClose, onLogin }: { onClose: () => void; onLogin: (request: { email: string; password: string }) => Promise<unknown> }) {
@@ -275,11 +309,7 @@ function AuthModal({ onClose, onLogin }: { onClose: () => void; onLogin: (reques
     event.preventDefault(); setPending(true); setError("");
     try { await onLogin({ email, password }); onClose(); } catch (requestError) { setError(getApiErrorMessage(requestError)); } finally { setPending(false); }
   }
-  return <div className="modal-backdrop"><div className="modal auth-modal"><button className="modal-close" onClick={onClose}>×</button><p className="eyebrow">Tu cuenta</p><h2>Iniciar sesión</h2><form onSubmit={submit}><label>Correo<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required /></label><label>Contraseña<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} required /></label>{error && <div className="notice error">{error}</div>}<button className="dark-button" disabled={pending}>{pending ? "Entrando..." : "Entrar"}</button></form></div></div>;
-}
-
-function AccountStrip({ sessionName }: { sessionName: string }) {
-  return <section className="account-strip" id="operator"><div><p className="eyebrow">Sesión activa</p><h2>Hola, {sessionName.split(" ")[0]}.</h2><p>Desde aquí podrás gestionar tu perfil y los módulos disponibles según tu rol.</p></div><span className="dark-button">Tu cuenta está activa</span></section>;
+  return <div className="modal-backdrop"><div className="modal auth-modal"><button className="modal-close" onClick={onClose}>×</button><p className="eyebrow">Tu cuenta</p><h2>Iniciar sesión</h2><form onSubmit={submit}><label>Correo<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required /></label><label>Contraseña<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} required /></label>{error && <div className="notice error">{error}</div>}<SpecularButton type="submit" size="md" className="specular-button--block" radius={999} disabled={pending}>{pending ? "Entrando..." : "Entrar"}</SpecularButton></form></div></div>;
 }
 
 function ManagementPanel({ roles, onClose }: { roles: UserProfile["roles"]; onClose: () => void }) {
@@ -399,13 +429,17 @@ function ManagementPanel({ roles, onClose }: { roles: UserProfile["roles"]; onCl
     <div className="modal management-modal" onClick={(event) => event.stopPropagation()}>
       <button className="modal-close" onClick={onClose}>×</button>
       <p className="eyebrow">Panel de gestión</p>
-      <h2>{isAdmin ? "Administrar Tamaka" : "Mi operación"}</h2>
-      <div className="management-toolbar">
-        <select value={type} onChange={(event) => { setType(event.target.value as OfferType); resetForm(); }}>
+      <div className="modal-header-row">
+        <h2>{isAdmin ? "Administrar Tamaka" : "Mi operación"}</h2>
+        <RoleBadges roles={roles} showAll />
+      </div>
+      <div className="toolbar management-toolbar">
+        <select className="management-toolbar__select" value={type} onChange={(event) => { setType(event.target.value as OfferType); resetForm(); }}>
           {availableTypes.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
         </select>
-        {(type === "services" || (type === "events" && !isGestor)) && <select value={commerceId} onChange={(event) => setCommerceId(event.target.value)}><option value="">Selecciona comercio</option>{commerceOptions.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select>}
-        <button className="filter-button" onClick={() => { resetForm(); }}>Nuevo</button>
+        {(type === "services" || (type === "events" && !isGestor)) && <select className="management-toolbar__select" value={commerceId} onChange={(event) => setCommerceId(event.target.value)}><option value="">Selecciona comercio</option>{commerceOptions.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select>}
+        <span className="toolbar__spacer" />
+        <SpecularButton size="md" className="specular-button--toolbar specular-button--sand" radius={999} onClick={() => { resetForm(); }}>Nuevo</SpecularButton>
       </div>
       {error && <div className="notice error">{error}</div>}
       {notice && <div className="notice success">{notice}</div>}
